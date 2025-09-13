@@ -2,10 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,77 +25,24 @@ app.use(limiter);
 // Body parsing middleware
 app.use(express.json());
 
-// MongoDB connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/abforce';
-mongoose.connect(MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('Connected to MongoDB'))
-.catch(err => console.error('MongoDB connection error:', err));
-
-// User Schema
-const userSchema = new mongoose.Schema({
-  username: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true,
-    minlength: 3,
-    maxlength: 30
-  },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true,
-    lowercase: true
-  },
-  password: {
-    type: String,
-    required: true,
-    minlength: 6
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  lastLogin: {
-    type: Date,
-    default: null
-  }
-});
-
-const User = mongoose.model('User', userSchema);
+// In-memory user storage (for demo purposes)
+let users = [
+    {
+        id: 1,
+        username: 'testuser18',
+        email: 'test18@gmail.com',
+        password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' // password: "password"
+    }
+];
 
 // JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-
-// Middleware to verify JWT
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
-  }
-
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
-    }
-    req.user = user;
-    next();
-  });
-};
-
-// Routes
+const JWT_SECRET = process.env.JWT_SECRET || 'abforce-super-secret-jwt-key-2025';
 
 // Health check
 app.get('/health', (req, res) => {
   res.json({
     status: 'OK',
-    database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
+    database: 'In-Memory',
     authentication: 'JWT',
     timestamp: new Date().toISOString()
   });
@@ -122,10 +67,7 @@ app.post('/register', async (req, res) => {
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({
-      $or: [{ email }, { username }]
-    });
-
+    const existingUser = users.find(u => u.email === email || u.username === username);
     if (existingUser) {
       return res.status(400).json({ error: 'User with this email or username already exists' });
     }
@@ -135,17 +77,19 @@ app.post('/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
     // Create user
-    const user = new User({
+    const newUser = {
+      id: users.length + 1,
       username,
       email,
-      password: hashedPassword
-    });
+      password: hashedPassword,
+      createdAt: new Date().toISOString()
+    };
 
-    await user.save();
+    users.push(newUser);
 
     // Generate JWT token
     const token = jwt.sign(
-      { userId: user._id, username: user.username },
+      { userId: newUser.id, username: newUser.username },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -153,10 +97,10 @@ app.post('/register', async (req, res) => {
     res.status(201).json({
       message: 'User registered successfully',
       user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        createdAt: user.createdAt
+        id: newUser.id,
+        username: newUser.username,
+        email: newUser.email,
+        createdAt: newUser.createdAt
       },
       api_token: token
     });
@@ -178,28 +122,20 @@ app.post('/login', async (req, res) => {
     }
 
     // Find user
-    const user = await User.findOne({
-      $or: [{ email: username }, { username }]
-    });
-
+    const user = users.find(u => u.email === username || u.username === username);
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);
-
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Update last login
-    user.lastLogin = new Date();
-    await user.save();
-
     // Generate JWT token
     const token = jwt.sign(
-      { userId: user._id, username: user.username },
+      { userId: user.id, username: user.username },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -207,10 +143,10 @@ app.post('/login', async (req, res) => {
     res.json({
       message: 'Login successful',
       user: {
-        id: user._id,
+        id: user.id,
         username: user.username,
         email: user.email,
-        lastLogin: user.lastLogin
+        lastLogin: new Date().toISOString()
       },
       api_token: token
     });
@@ -222,20 +158,36 @@ app.post('/login', async (req, res) => {
 });
 
 // Protected route - get user profile
-app.get('/profile', authenticateToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.userId).select('-password');
-    if (!user) {
+app.get('/profile', (req, res) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    
+    const userData = users.find(u => u.id === user.userId);
+    if (!userData) {
       return res.status(404).json({ error: 'User not found' });
     }
-    res.json({ user });
-  } catch (error) {
-    console.error('Profile error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
+    
+    res.json({ 
+      user: {
+        id: userData.id,
+        username: userData.username,
+        email: userData.email,
+        createdAt: userData.createdAt
+      }
+    });
+  });
 });
 
-// Logout endpoint (client-side token removal)
+// Logout endpoint
 app.post('/logout', (req, res) => {
   res.json({ message: 'Logout successful' });
 });
