@@ -104,6 +104,21 @@ const emailTemplates = {
             </code>
           </p>
           
+          <div style="background: #f8f9fa; border: 2px solid #dee2e6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #495057; margin: 0 0 10px 0; font-size: 16px;">📋 Reset Token (Copy & Paste)</h3>
+            <p style="color: #666; font-size: 14px; margin: 0 0 10px 0;">
+              If the button above doesn't work, you can manually enter this token:
+            </p>
+            <div style="background: #ffffff; border: 1px solid #ced4da; padding: 15px; border-radius: 5px; text-align: center;">
+              <code style="font-family: 'Courier New', monospace; font-size: 18px; font-weight: bold; color: #dc3545; letter-spacing: 1px; word-break: break-all;">
+                ${token}
+              </code>
+            </div>
+            <p style="color: #6c757d; font-size: 12px; margin: 10px 0 0 0;">
+              ⚠️ This token is case-sensitive and expires in 1 hour
+            </p>
+          </div>
+          
           <div style="background: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; border-radius: 5px; margin: 20px 0;">
             <p style="margin: 0; color: #721c24; font-size: 14px;">
               <strong>⚠️ Security Notice:</strong> This reset link will expire in 1 hour. 

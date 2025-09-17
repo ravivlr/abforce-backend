@@ -435,6 +435,14 @@ app.post('/login', async (req, res) => {
       });
     }
 
+    // Check if email is verified
+    if (!user.isEmailVerified) {
+      return res.status(403).json({ 
+        error: 'Please verify your email address before logging in. Check your inbox for the verification email.',
+        emailVerified: false
+      });
+    }
+
     // Reset failed login attempts on successful login
     user.failedLoginAttempts = 0;
     user.accountLockedUntil = null;
